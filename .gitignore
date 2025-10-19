@@ -8,7 +8,7 @@ __pycache__/
 # Ignore the file with secret credentials
 .env
 
-# Ignore ALL large data files
+# Ignore ALL large data and model files
 datasets/*.csv
 *.pkl
 public_suffix_list.dat
