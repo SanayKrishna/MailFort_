@@ -38,7 +38,7 @@ This tool helps Security Operations Centers (SOCs) reduce alert fatigue by prior
 
 ## 💻 Installation
 
-1. Clone the repository:
+### **1. Clone the Repository**
 ```bash
 git clone https://github.com/yourusername/phishing-email-analyzer.git
 cd phishing-email-analyzer
