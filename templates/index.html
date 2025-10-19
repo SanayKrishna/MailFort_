@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>MailFort</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="main-container">
+        <header>
+            <h1>> MailFort<span class="cursor">_</span></h1>
+            <div class="kpi-container">
+                <h2>>[SCANNED: <span id="kpi-scanned">00</span>]</h2>
+                <h2>>[THREATS_DETECTED: <span id="kpi-threats">00</span>]</h2>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <!-- keep Jinja only for class assignment (no inline style attributes) -->
+            <button id="tab-inbox" class="tab-button {% if active_tab == 'inbox' %}active{% endif %}" data-target="inbox-analysis">[[ANALYZE_INBOX]]</button>
+            <button id="tab-manual" class="tab-button {% if active_tab == 'manual' %}active{% endif %}" data-target="manual-analysis">[[ANALYZE_MANUAL]]</button>
+        </div>
+
+        <!-- Both tabs are rendered but hidden by default.
+             We will show the correct one on DOMContentLoaded using the active_tab variable. -->
+        <div id="inbox-analysis" class="tab-content" style="display: none;">
+            <div class="workbench-container">
+                <div class="left-panel panel">
+                    <h2>[INBOX_SCAN]</h2>
+                    <div class="fetch-controls">
+                        <label for="email-count">> Fetch last:</label>
+                        <div class="stepper-container">
+                            <button type="button" id="btn-minus" class="stepper-btn">-</button>
+                            <input type="number" id="email-count" value="10" min="1" max="50">
+                            <button type="button" id="btn-plus" class="stepper-btn">+</button>
+                        </div>
+                        <button id="fetch-button">> Run Scan</button>
+                    </div>
+                    <div id="spinner" class="spinner" style="display: none;"></div>
+                    <div id="email-list-container"></div>
+                </div>
+
+                <div class="right-panel panel" id="report-panel">
+                    <h2>[THREAT_REPORT]</h2>
+                    <div id="report-placeholder"><p>> Select an email to analyze...</p></div>
+
+                    <!-- UPDATED REPORT CONTENT -->
+                    <div id="report-content" style="display: none;">
+                        <p id="report-verdict" class="report-verdict"></p>
+
+                        <div class="panel-grid">
+                            <div class="indicator-card">
+                                <h3>[KEY_INDICATORS]</h3>
+                                <p><strong>> SENDER:</strong> <span id="report-sender"></span></p>
+                                <p><strong>> URLS_FOUND:</strong> <span id="report-url-count"></span></p>
+                                <p><strong>> SUSPICIOUS_KEYWORDS:</strong> <span id="report-keywords"></span></p>
+                            </div>
+
+                            <!-- NEW THREAT INTEL PANEL -->
+                            <div class="indicator-card">
+                                <h3>[THREAT_INTELLIGENCE]</h3>
+                                <div id="report-vt-results">
+                                    <!-- VT results will be injected here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="indicator-card">
+                            <h3>[BODY]</h3>
+                            <textarea id="report-body" readonly></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="manual-analysis" class="tab-content" style="display: none;">
+            <div class="panel">
+                <h2>[MANUAL_INPUT]</h2>
+                <form action="/analyze_manual" method="post">
+                    <textarea name="email_text" placeholder="> Paste email text here...">{{ email_text or '' }}</textarea>
+                    <button type="submit">> Generate Report</button>
+                </form>
+
+                {% if details and active_tab == 'manual' %}
+                <div class="manual-report-container">
+                    <p class="report-verdict {{ 'phishing' if details.result == 'PHISHING' else '' }}">
+                        > VERDICT: [{{ details.result }}] // CONFIDENCE: {{ details.confidence }}
+                    </p>
+                    <p class="report-line"><strong>> URLS_FOUND:</strong> {{ details.url_count }}</p>
+                    <p class="report-line"><strong>> SUSPICIOUS_KEYWORDS:</strong> {{ details.keywords_str }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // active_tab value provided by Flask/Jinja
+        const activeTabName = "{{ active_tab }}";
+
+        // Elements
+        const inboxDiv = document.getElementById('inbox-analysis');
+        const manualDiv = document.getElementById('manual-analysis');
+        const tabButtons = document.querySelectorAll('.tab-button');
+
+        // Show correct tab on initial render
+        if (activeTabName === 'manual') {
+            inboxDiv.style.display = 'none';
+            manualDiv.style.display = 'block';
+            document.getElementById('tab-manual').classList.add('active');
+            document.getElementById('tab-inbox').classList.remove('active');
+        } else {
+            // default to inbox
+            inboxDiv.style.display = 'block';
+            manualDiv.style.display = 'none';
+            document.getElementById('tab-inbox').classList.add('active');
+            document.getElementById('tab-manual').classList.remove('active');
+        }
+
+        // Tab button click wiring (uses data-target attribute)
+        tabButtons.forEach(btn => {
+            btn.addEventListener('click', function (evt) {
+                const targetId = btn.getAttribute('data-target');
+                // hide all
+                document.querySelectorAll('.tab-content').forEach(tc => tc.style.display = 'none');
+                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                // show clicked
+                document.getElementById(targetId).style.display = 'block';
+                btn.classList.add('active');
+            });
+        });
+
+        // Now wire the rest of the UI. All DOM nodes exist now.
+        let analyzedEmails = [];
+
+        const minusBtn = document.getElementById('btn-minus');
+        const plusBtn = document.getElementById('btn-plus');
+        const countInput = document.getElementById('email-count');
+        const fetchBtn = document.getElementById('fetch-button');
+
+        if (minusBtn) {
+            minusBtn.addEventListener('click', function() {
+                let currentValue = parseInt(countInput.value);
+                const min = parseInt(countInput.min);
+                if (currentValue > min) countInput.value = currentValue - 1;
+            });
+        }
+
+        if (plusBtn) {
+            plusBtn.addEventListener('click', function() {
+                let currentValue = parseInt(countInput.value);
+                const max = parseInt(countInput.max);
+                if (currentValue < max) countInput.value = currentValue + 1;
+            });
+        }
+
+        if (fetchBtn) {
+            fetchBtn.addEventListener('click', function () {
+                const listContainer = document.getElementById('email-list-container');
+                const spinner = document.getElementById('spinner');
+                const emailCount = countInput.value;
+
+                spinner.style.display = 'block';
+                listContainer.innerHTML = '';
+                document.getElementById('report-placeholder').style.display = 'block';
+                document.getElementById('report-content').style.display = 'none';
+
+                fetch(`/fetch_emails_api?count=${emailCount}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        spinner.style.display = 'none';
+                        if (data.status === 'success') {
+                            analyzedEmails = data.emails;
+                            let threatsFound = 0;
+
+                            analyzedEmails.forEach((email, index) => {
+                                const isPhishing = email.analysis.result === 'PHISHING';
+                                if (isPhishing) threatsFound++;
+                                const item = document.createElement('div');
+                                item.className = 'email-list-item';
+                                if (isPhishing) item.classList.add('phishing-item');
+                                item.innerHTML = `<p class="email-subject">> ${email.subject}</p><p class="email-sender">${email.from}</p>`;
+                                item.onclick = () => displayEmailDetails(index);
+                                listContainer.appendChild(item);
+                            });
+
+                            document.getElementById('kpi-scanned').innerText = String(analyzedEmails.length).padStart(2, '0');
+                            document.getElementById('kpi-threats').innerText = String(threatsFound).padStart(2, '0');
+                        } else {
+                            listContainer.innerHTML = '<p class="error-message">> ERROR: Could not fetch emails.</p>';
+                        }
+                    })
+                    .catch(err => {
+                        spinner.style.display = 'none';
+                        listContainer.innerHTML = `<p class="error-message">> ERROR: ${err.message}</p>`;
+                    });
+            });
+        }
+
+        // displayEmailDetails (includes VT injection)
+        window.displayEmailDetails = function(index) {
+            const email = analyzedEmails[index];
+            if (!email) return;
+
+            document.getElementById('report-placeholder').style.display = 'none';
+            document.getElementById('report-content').style.display = 'block';
+
+            const verdictP = document.getElementById('report-verdict');
+            const isPhishing = email.analysis.result === 'PHISHING';
+            verdictP.className = isPhishing ? 'report-verdict phishing' : 'report-verdict';
+            verdictP.innerText = `> VERDICT: [${email.analysis.result}] // CONFIDENCE: ${email.analysis.confidence}`;
+
+            document.getElementById('report-sender').innerText = email.from;
+            document.getElementById('report-url-count').innerText = email.analysis.url_count;
+            document.getElementById('report-keywords').innerText = email.analysis.keywords_str;
+            document.getElementById('report-body').value = email.body || '';
+
+            // VIRUSTOTAL RESULTS
+            const vtContainer = document.getElementById('report-vt-results');
+            vtContainer.innerHTML = '';
+            const vtResults = email.analysis.vt_results;
+
+            if (vtResults && Array.isArray(vtResults) && vtResults.length > 0) {
+                vtResults.forEach(item => {
+                    const report = item.report || { positives: 0, total: 0 };
+                    let resultClass = 'vt-clean';
+                    if (report.positives > 0) resultClass = 'vt-malicious';
+
+                    const vtLine = document.createElement('p');
+                    vtLine.className = `report-line ${resultClass}`;
+                    const shortUrl = item.url ? item.url.substring(0, 80) + (item.url.length > 80 ? '...' : '') : '[unknown]';
+                    vtLine.innerHTML = `> [${report.positives}/${report.total}] ${shortUrl}`;
+                    vtContainer.appendChild(vtLine);
+                });
+            } else {
+                vtContainer.innerHTML = '<p class="report-line">> No URLs sent for analysis.</p>';
+            }
+
+            document.querySelectorAll('.email-list-item').forEach((item, i) => item.classList.toggle('active', i === index));
+        };
+
+    }); // end DOMContentLoaded
+    </script>
+</body>
+</html>

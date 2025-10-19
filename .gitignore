@@ -1,0 +1,21 @@
+# Ignore the Python virtual environment
+venv/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore the file with secret credentials
+.env
+
+# Ignore the large, generated dataset files
+# The code generates these, so we don't need to store them.
+datasets/features_dataset.csv
+datasets/features_dataset_v3.csv
+datasets/master_dataset.csv
+
+# Ignore the large, generated model files
+*.pkl
+
+# Ignore the public suffix list data file
+public_suffix_list.dat
