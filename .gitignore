@@ -1,20 +1,14 @@
 # Ignore the Python virtual environment
-    venv/
+venv/
 
-    # Ignore Python cache files
-    __pycache__/
-    *.pyc
+# Ignore Python cache files
+__pycache__/
+*.pyc
 
-    # Ignore the file with secret credentials
-    .env
+# Ignore the file with secret credentials
+.env
 
-    # --- THIS IS THE CRUCIAL FIX ---
-    # Ignore ALL large data files, both source and generated.
-    # The README will tell users where to download them.
-    datasets/*.csv
-
-    # Ignore all generated model and vectorizer files
-    *.pkl
-
-    # Ignore the public suffix list data file
-    public_suffix_list.dat
+# Ignore ALL large data files
+datasets/*.csv
+*.pkl
+public_suffix_list.dat
