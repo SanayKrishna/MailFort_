@@ -27,6 +27,15 @@ WHITELISTED_DOMAINS = {
     'substack.com', 'mcafee.com' # Added based on your screenshot
 }
 
+def is_allowlisted(domain):
+    """
+    True if domain is a trusted domain or a subdomain of one.
+    Matches on a dot boundary, so accounts.google.com passes but evilgoogle.com does not.
+    """
+    domain = (domain or "").lower().rstrip(".")
+    return any(domain == d or domain.endswith("." + d) for d in WHITELISTED_DOMAINS)
+
+
 # --- THE DEFINITIVE V3 ANALYSIS FUNCTION ---
 def analyze_email_details(full_email_text, from_address=None):
     """
@@ -39,9 +48,8 @@ def analyze_email_details(full_email_text, from_address=None):
             domain_str = match.group(1).lower()
 
     # --- STEP 1: THE WHITELIST OVERRIDE ---
-    # Check if the sender's domain ENDS WITH a trusted domain.
-    # This correctly handles subdomains like 'accounts.google.com'.
-    if any(domain_str.endswith(whitelisted_domain) for whitelisted_domain in WHITELISTED_DOMAINS):
+    # Trusted sender domain (or subdomain) skips the model.
+    if is_allowlisted(domain_str):
         return {
             'result': 'SAFE',
             'confidence': '100.00%',
